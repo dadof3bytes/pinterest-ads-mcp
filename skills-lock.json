@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "ads-pinterest": {
+      "source": "agricidaniel/claude-ads",
+      "sourceType": "github",
+      "skillPath": "skills/ads-pinterest/SKILL.md",
+      "computedHash": "1ae0acc3d0ba52be64e65636da5e71c5a5acfe5877404b1f0c962c979f60203e"
+    }
+  }
+}
