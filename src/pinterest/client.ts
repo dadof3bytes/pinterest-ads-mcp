@@ -34,6 +34,27 @@ interface RequestOptions {
 
 let cachedAccessToken: { token: string; expiresAt: number } | null = null;
 
+/** Pinterest requires client_id:client_secret via HTTP Basic Auth on /oauth/token. */
+function pinterestBasicAuthHeader(appId: string, appSecret: string): string {
+  const encoded = Buffer.from(`${appId}:${appSecret}`, "utf8").toString("base64");
+  return `Basic ${encoded}`;
+}
+
+function formatPinterestOAuthError(json: Record<string, unknown>): string {
+  const message =
+    typeof json.message === "string"
+      ? json.message
+      : typeof json.error_description === "string"
+        ? json.error_description
+        : typeof json.error === "string"
+          ? json.error
+          : null;
+  if (message) {
+    return `OAuth token exchange failed: ${message}`;
+  }
+  return `OAuth token exchange failed (${JSON.stringify(json)})`;
+}
+
 function isSandboxMode(): boolean {
   const env = getEnv();
   if (env.PINTEREST_USE_SANDBOX) return true;
@@ -71,12 +92,13 @@ async function exchangeRefreshToken(refreshToken: string): Promise<{
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
-    client_id: appId,
-    client_secret: appSecret,
   });
   const res = await fetch(`${tokenBaseUrl()}/oauth/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: pinterestBasicAuthHeader(appId, appSecret),
+    },
     body,
   });
   const json = (await res.json()) as Record<string, unknown>;
@@ -135,21 +157,21 @@ export async function exchangeAuthorizationCode(
     grant_type: "authorization_code",
     code,
     redirect_uri: redirectUri,
-    client_id: appId,
-    client_secret: appSecret,
   });
+  if (getEnv().PINTEREST_CONTINUOUS_REFRESH === true) {
+    body.set("continuous_refresh", "true");
+  }
   const res = await fetch(`${base}/oauth/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: pinterestBasicAuthHeader(appId, appSecret),
+    },
     body,
   });
   const json = (await res.json()) as Record<string, unknown>;
   if (!res.ok) {
-    throw new PinterestApiError(
-      `OAuth token exchange failed`,
-      res.status,
-      json,
-    );
+    throw new PinterestApiError(formatPinterestOAuthError(json), res.status, json);
   }
   const refreshToken = json.refresh_token;
   if (typeof refreshToken !== "string") {

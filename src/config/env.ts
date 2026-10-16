@@ -16,6 +16,10 @@ const envSchema = z.object({
   DRAFT_SIGNING_SECRET: z.string().min(32).optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   OAUTH_STATE_SECRET: z.string().min(16).optional(),
+  PINTEREST_CONTINUOUS_REFRESH: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
 });
 
 export type Env = z.infer<typeof envSchema>;
