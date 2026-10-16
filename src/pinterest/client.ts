@@ -1,6 +1,10 @@
 import { getEnv, requireEnv } from "@/src/config/env";
 import { majorToMicro, microToMajor } from "@/src/pinterest/microcurrency";
-import { getRefreshToken, saveRefreshToken } from "@/src/pinterest/token-store";
+import {
+  getRefreshToken,
+  saveRefreshToken,
+  type SaveRefreshTokenResult,
+} from "@/src/pinterest/token-store";
 
 export class PinterestApiError extends Error {
   constructor(
@@ -146,7 +150,7 @@ export async function getAccessToken(): Promise<string> {
 export async function exchangeAuthorizationCode(
   code: string,
   sandboxFromState: boolean,
-): Promise<{ scopes: string[] }> {
+): Promise<{ scopes: string[]; tokenSave: SaveRefreshTokenResult }> {
   const appId = requireEnv("PINTEREST_APP_ID");
   const appSecret = requireEnv("PINTEREST_APP_SECRET");
   const redirectUri = requireEnv("PINTEREST_REDIRECT_URI");
@@ -181,9 +185,9 @@ export async function exchangeAuthorizationCode(
     typeof json.scope === "string"
       ? json.scope.split(",").map((s) => s.trim())
       : [];
-  await saveRefreshToken(refreshToken, scopes, sandboxFromState);
+  const tokenSave = await saveRefreshToken(refreshToken, scopes, sandboxFromState);
   cachedAccessToken = null;
-  return { scopes };
+  return { scopes, tokenSave };
 }
 
 function buildQuery(

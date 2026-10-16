@@ -239,9 +239,11 @@ Use cloud hosting when you want MCP available without keeping your laptop on.
 5. Add the same redirect URI in the Pinterest developer app.
 6. Deploy, then visit `https://YOUR-DOMAIN/connect` and complete OAuth **on the deployed site**.
 
-**Important for cloud:**
+**Important for cloud (Vercel):**
 
-- Serverless disks are **ephemeral**. `.data/oauth.json` may disappear on redeploy. Prefer storing `PINTEREST_REFRESH_TOKEN_ENCRYPTED` + `TOKEN_ENCRYPTION_KEY` in the host’s env after the first successful connect, or re-run `/connect` after each deploy if you rely on the file.
+- Vercel **cannot** write `.data/oauth.json` under `/var/task`. After OAuth succeeds, `/connect` shows a yellow **One more step for Vercel** panel with `PINTEREST_REFRESH_TOKEN_ENCRYPTED`. Copy it into Vercel → Settings → Environment Variables, then redeploy.
+- Use the **same** `TOKEN_ENCRYPTION_KEY` in Vercel that was set when you completed OAuth (the encrypted blob only decrypts with that key).
+- Do not rely on `.data/` on serverless; tokens must live in env vars.
 - Set a strong `MCP_AUTH_TOKEN` and **always** send the Bearer header from your AI client.
 - Do not share the public MCP URL publicly without that token.
 
@@ -363,7 +365,8 @@ If all three succeed, reporting and draft tools are ready to use.
 | --- | --- | --- |
 | **redirect_uri mismatch** | Pinterest app redirect ≠ `PINTEREST_REDIRECT_URI` | Copy the URI character-for-character into the developer app; redeploy if you changed domain. |
 | **401 / 403** on ads tools | Missing scopes, app not approved for Ads API, or user lacks ad account role | Re-check scopes table; confirm you’re admin on `PINTEREST_AD_ACCOUNT_ID`; re-authorize at `/connect`. |
-| **No Pinterest refresh token** / tools say not connected | Never finished OAuth, deleted `.data/oauth.json`, or wrong `TOKEN_ENCRYPTION_KEY` | Visit `/connect` and complete OAuth again. |
+| **No Pinterest refresh token** / tools say not connected | Never finished OAuth, deleted `.data/oauth.json`, missing `PINTEREST_REFRESH_TOKEN_ENCRYPTED` on Vercel, or wrong `TOKEN_ENCRYPTION_KEY` | Visit `/connect` and complete OAuth again; on Vercel, paste encrypted token from setup panel into env and redeploy. |
+| **ENOENT mkdir `/var/task/.data`** | Hosted on Vercel without env token storage | Redeploy with this fix, run OAuth again, copy `PINTEREST_REFRESH_TOKEN_ENCRYPTED` from `/connect` into Vercel env. |
 | **Token refresh failed** | Revoked app, expired refresh, sandbox/live mismatch | Re-run `/connect`; align `PINTEREST_USE_SANDBOX` with connection mode. |
 | **401 Unauthorized MCP request** | Missing/wrong Bearer on a public URL, or wrong token on localhost | Add `Authorization: Bearer` matching `MCP_AUTH_TOKEN`. On localhost you can omit the header, but a **wrong** Bearer still fails. |
 | **sync_request_too_large** / analytics timeout | Range too long, too many IDs, or hourly granularity | Use `pinterest_create_report` + `pinterest_get_report`. |

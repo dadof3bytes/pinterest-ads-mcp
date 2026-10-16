@@ -1,16 +1,25 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { getEnv } from "@/src/config/env";
-import { getConnectionMeta } from "@/src/pinterest/token-store";
+import { getConnectionMeta, OAUTH_SETUP_COOKIE } from "@/src/pinterest/token-store";
 import { pinterestAuthorizeUrl } from "@/src/pinterest/oauth-state";
+import { VercelSetupPanel } from "@/app/connect/vercel-setup-panel";
 
 export default async function ConnectPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sandbox?: string; error?: string; connected?: string }>;
+  searchParams: Promise<{
+    sandbox?: string;
+    error?: string;
+    connected?: string;
+    vercel_setup?: string;
+  }>;
 }) {
   const params = await searchParams;
   const env = getEnv();
   const meta = await getConnectionMeta();
+  const cookieStore = await cookies();
+  const pendingEncrypted = cookieStore.get(OAUTH_SETUP_COOKIE)?.value;
   const sandbox = params.sandbox === "1" || env.PINTEREST_USE_SANDBOX === true;
   let authorizeUrl: string | null = null;
   try {
@@ -18,6 +27,9 @@ export default async function ConnectPage({
   } catch {
     authorizeUrl = null;
   }
+
+  const showVercelSetup =
+    params.vercel_setup === "1" && pendingEncrypted && !env.PINTEREST_REFRESH_TOKEN_ENCRYPTED;
 
   return (
     <main style={{ fontFamily: "system-ui", padding: "2rem", maxWidth: 720 }}>
@@ -27,8 +39,17 @@ export default async function ConnectPage({
       {params.error ? (
         <p style={{ color: "#b00020" }}>OAuth error: {params.error}</p>
       ) : null}
-      {params.connected === "1" ? (
+      {params.connected === "1" && !showVercelSetup ? (
         <p style={{ color: "#0a7" }}>Pinterest connected successfully.</p>
+      ) : null}
+      {params.connected === "1" && showVercelSetup ? (
+        <p style={{ color: "#0a7" }}>
+          Pinterest authorized — finish Vercel setup below to persist the connection.
+        </p>
+      ) : null}
+
+      {showVercelSetup && pendingEncrypted ? (
+        <VercelSetupPanel encryptedToken={pendingEncrypted} />
       ) : null}
 
       <section style={{ marginTop: "1.5rem" }}>
@@ -37,6 +58,14 @@ export default async function ConnectPage({
           <li>Sandbox mode: {sandbox ? "on" : "off"}</li>
           <li>
             Ad account id: {env.PINTEREST_AD_ACCOUNT_ID ?? "(set PINTEREST_AD_ACCOUNT_ID)"}
+          </li>
+          <li>
+            Token storage:{" "}
+            {env.PINTEREST_REFRESH_TOKEN_ENCRYPTED || env.PINTEREST_REFRESH_TOKEN
+              ? "environment variable"
+              : meta
+                ? "local file (.data/oauth.json)"
+                : "not configured"}
           </li>
         </ul>
       </section>
