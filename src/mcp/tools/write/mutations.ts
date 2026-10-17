@@ -9,9 +9,11 @@ import {
   verifyDraftToken,
   type DraftKind,
 } from "@/src/pinterest/draft-token";
+import { buildPinterestWriteRequest } from "@/src/pinterest/batch-writes";
 import {
   prepareWriteBody,
   pinterestRequest,
+  pinterestWriteRequest,
   resolveAdAccountId,
 } from "@/src/pinterest/client";
 
@@ -24,72 +26,28 @@ async function applyDraft(
   draftToken: string,
 ): Promise<{ before: unknown; after: unknown; idempotency_key: string }> {
   const draft = verifyDraftToken(draftToken);
-  const accountId = draft.ad_account_id;
-  const body = prepareWriteBody(draft.body);
-  let path = "";
-  let method: "POST" | "PATCH" = "POST";
-
-  switch (draft.kind) {
-    case "create_campaign":
-      path = `/ad_accounts/${accountId}/campaigns`;
-      method = "POST";
-      break;
-    case "update_campaign":
-      path = `/ad_accounts/${accountId}/campaigns/${draft.path_params?.campaign_id}`;
-      method = "PATCH";
-      break;
-    case "create_ad_group":
-      path = `/ad_accounts/${accountId}/ad_groups`;
-      method = "POST";
-      break;
-    case "update_ad_group":
-      path = `/ad_accounts/${accountId}/ad_groups/${draft.path_params?.ad_group_id}`;
-      method = "PATCH";
-      break;
-    case "create_pin":
-      path = `/pins`;
-      method = "POST";
-      break;
-    case "create_ad":
-      path = `/ad_accounts/${accountId}/ads`;
-      method = "POST";
-      break;
-    case "update_ad":
-      path = `/ad_accounts/${accountId}/ads/${draft.path_params?.ad_id}`;
-      method = "PATCH";
-      break;
-    case "create_keyword":
-      path = `/ad_accounts/${accountId}/keywords`;
-      method = "POST";
-      break;
-    case "update_keyword":
-      path = `/ad_accounts/${accountId}/keywords`;
-      method = "PATCH";
-      break;
-    case "update_status":
-      path = `/ad_accounts/${accountId}/${draft.path_params?.entity_type}/${draft.path_params?.entity_id}`;
-      method = "PATCH";
-      break;
-    default: {
-      const _exhaustive: never = draft.kind;
-      throw new Error(`Unhandled draft kind: ${String(_exhaustive)}`);
-    }
-  }
+  const preparedBody = prepareWriteBody(draft.body);
+  const write = buildPinterestWriteRequest({
+    kind: draft.kind,
+    adAccountId: draft.ad_account_id,
+    body: preparedBody,
+    pathParams: draft.path_params,
+  });
 
   let before: unknown = null;
-  if (method === "PATCH" && draft.path_params) {
+  if (write.readBeforePath) {
     try {
-      before = await pinterestRequest(path);
+      before = await pinterestRequest(write.readBeforePath);
     } catch {
       before = null;
     }
   }
 
-  const after = await pinterestRequest(path, {
-    method,
-    body,
+  const after = await pinterestWriteRequest(write.path, {
+    method: write.method,
+    body: write.body,
     idempotencyKey: draft.idempotency_key,
-    allowReadRetry: false,
+    operationLabel: draft.kind,
   });
 
   return { before, after, idempotency_key: draft.idempotency_key };
@@ -390,6 +348,5 @@ export function registerWriteTools(server: ToolRegistryServer): void {
     },
   );
 
-  // Surface allowed create objectives for agents (read-only metadata via description)
   void CREATE_OBJECTIVES;
 }

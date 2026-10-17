@@ -1,6 +1,10 @@
 import { getEnv, requireEnv } from "@/src/config/env";
 import { majorToMicro, microToMajor } from "@/src/pinterest/microcurrency";
 import {
+  assertBatchWriteSucceeded,
+  formatPinterestErrorBody,
+} from "@/src/pinterest/batch-writes";
+import {
   getRefreshToken,
   saveRefreshToken,
   type SaveRefreshTokenResult,
@@ -295,16 +299,39 @@ export async function pinterestRequest<T = unknown>(
 
   const res = await doFetch(true);
   const text = await res.text();
-  let json: unknown = text ? JSON.parse(text) : null;
+  let json: unknown = null;
+  if (text) {
+    try {
+      json = JSON.parse(text) as unknown;
+    } catch {
+      json = { message: text };
+    }
+  }
   if (!res.ok) {
+    const detail = formatPinterestErrorBody(json);
     throw new PinterestApiError(
-      `Pinterest API ${method} ${path} failed (${res.status})`,
+      `Pinterest API ${method} ${path} failed (${res.status}): ${detail}`,
       res.status,
       json,
     );
   }
   json = convertResponseMoney(json);
   return json as T;
+}
+
+export async function pinterestWriteRequest<T = unknown>(
+  path: string,
+  options: Omit<RequestOptions, "allowReadRetry"> & {
+    method: "POST" | "PATCH";
+    operationLabel: string;
+  },
+): Promise<T> {
+  const result = await pinterestRequest<T>(path, {
+    ...options,
+    allowReadRetry: false,
+  });
+  assertBatchWriteSucceeded(result, options.operationLabel);
+  return result;
 }
 
 export interface PaginatedResult<T> {
