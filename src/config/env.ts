@@ -13,6 +13,7 @@ const envSchema = z.object({
   PINTEREST_REFRESH_TOKEN_ENCRYPTED: z.string().optional(),
   TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
   MCP_AUTH_TOKEN: z.string().min(16).optional(),
+  CONNECT_PAGE_TOKEN: z.string().min(16).optional(),
   DRAFT_SIGNING_SECRET: z.string().min(32).optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   OAUTH_STATE_SECRET: z.string().min(16).optional(),

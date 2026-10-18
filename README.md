@@ -237,13 +237,16 @@ Use cloud hosting when you want MCP available without keeping your laptop on.
    - `NEXT_PUBLIC_APP_URL` → `https://YOUR-DOMAIN`
    - `PINTEREST_REDIRECT_URI` → `https://YOUR-DOMAIN/api/oauth/pinterest`
 5. Add the same redirect URI in the Pinterest developer app.
-6. Deploy, then visit `https://YOUR-DOMAIN/connect` and complete OAuth **on the deployed site**.
+6. Set `CONNECT_PAGE_TOKEN` (see **Security notes**), redeploy, then open  
+   `https://YOUR-DOMAIN/connect?connect_token=YOUR_CONNECT_PAGE_TOKEN` and complete OAuth **on the deployed site**.
 
 **Important for cloud (Vercel):**
 
-- Vercel **cannot** write `.data/oauth.json` under `/var/task`. After OAuth succeeds, `/connect` shows a yellow **One more step for Vercel** panel with `PINTEREST_REFRESH_TOKEN_ENCRYPTED`. Copy it into Vercel → Settings → Environment Variables, then redeploy.
-- Use the **same** `TOKEN_ENCRYPTION_KEY` in Vercel that was set when you completed OAuth (the encrypted blob only decrypts with that key).
-- Do not rely on `.data/` on serverless; tokens must live in env vars.
+- Vercel **cannot** write `.data/oauth.json` under `/var/task`. Tokens must live in environment variables.
+- **`TOKEN_ENCRYPTION_KEY`** must already be set in Vercel **before** you run OAuth (same value forever for that deployment, unless you rotate and re-connect).
+- After OAuth succeeds, `/connect` shows a yellow **One more step for Vercel** panel with the value for **`PINTEREST_REFRESH_TOKEN_ENCRYPTED`**. Copy the entire string into Vercel → Settings → Environment Variables → add `PINTEREST_REFRESH_TOKEN_ENCRYPTED` → **Redeploy**.
+- Until that env var exists, MCP tools will say there is no refresh token — the yellow panel is a one-time handoff, not automatic storage.
+- Use the **same** `TOKEN_ENCRYPTION_KEY` that was active when you generated that encrypted blob. Changing the key without re-running OAuth breaks decryption.
 - Set a strong `MCP_AUTH_TOKEN` and **always** send the Bearer header from your AI client.
 - Do not share the public MCP URL publicly without that token.
 
@@ -269,6 +272,7 @@ Build/start commands (if your host asks):
 | `TOKEN_ENCRYPTION_KEY` | Storing token in `.data/oauth.json` | 32+ char secret; encrypts refresh token on disk | Cannot save or read OAuth file. |
 | `OAUTH_STATE_SECRET` | OAuth login | 16+ char HMAC secret for login CSRF | `/connect` shows “Set … OAUTH_STATE_SECRET”. |
 | `MCP_AUTH_TOKEN` | Recommended | 16+ char Bearer token for `/api/mcp` | Open MCP on public URLs; localhost still works without header. |
+| `CONNECT_PAGE_TOKEN` | **Required on public URLs** | Secret to open `/connect` (`?connect_token=…`) | Anyone can start OAuth against your Pinterest app if `/connect` is public. |
 | `DRAFT_SIGNING_SECRET` | Optional | Signs write “draft” tokens (defaults to `TOKEN_ENCRYPTION_KEY`) | Write previews fail if neither is set. |
 | `NEXT_PUBLIC_APP_URL` | Links / redirects | Base URL of this app (e.g. `http://localhost:3000`) | Wrong redirect targets in some flows. |
 | `PINTEREST_REFRESH_TOKEN` | Optional dev | Plain refresh token in env | Bypasses `.data/oauth.json`; dev-only risk. |
@@ -378,6 +382,22 @@ If all three succeed, reporting and draft tools are ready to use.
 ---
 
 ## Security notes (please read)
+
+### Lock down `/connect` on Vercel (or any public URL)
+
+`/connect` starts Pinterest login for **whoever** opens it. That does not let strangers control your MCP if you already stored **`PINTEREST_REFRESH_TOKEN_ENCRYPTED`** in Vercel (API calls use env, not a random visitor’s session). It **does** let them authorize **their** Pinterest user against **your** developer app, which is noisy, confusing, and risky during initial setup.
+
+**Fix:** set a long random **`CONNECT_PAGE_TOKEN`** in Vercel env, redeploy, and **never** publish plain `/connect`. Use only:
+
+```text
+https://YOUR-DOMAIN/connect?connect_token=YOUR_CONNECT_PAGE_TOKEN
+```
+
+After one successful visit, an httpOnly cookie keeps the session for about an hour so OAuth redirect still works. The Pinterest callback URL (`/api/oauth/pinterest?code=…`) stays public — that is required by OAuth.
+
+Also: remove or avoid linking `/connect` from a public homepage; treat the gated URL like a password reset link.
+
+### Other secrets
 
 - **`.env.local`** holds app secrets. Do not email it, commit it to GitHub, or paste into Slack/ChatGPT.
 - **`.data/oauth.json`** is as sensitive as a password. Back up only encrypted, store offline, never in git.
